@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrabhatShop</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <!-- SheetJS for Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- LocalForage for IndexedDB (Automatic Local SQL-like Storage) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        .tab-btn.active {
+            border-bottom: 3px solid #0d9488;
+            color: #0f766e;
+            background-color: #f0fdfa;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background-color: white !important; }
+            .card { border: none !important; box-shadow: none !important; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased h-screen flex flex-col overflow-hidden">
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="inline-block p-3 bg-teal-100 rounded-full mb-4">
+                    <span class="text-3xl">💼</span>
+                </div>
+                <h1 class="text-3xl font-bold text-slate-800">Prabhat<span class="text-teal-600">Shop</span></h1>
+                <p class="text-slate-500">Shop Management System</p>
+            </div>
+            <form id="login-form" class="space-y-4">
+                <input type="text" id="username" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Admin ID">
+                <input type="password" id="password" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500 outline-none" placeholder="Password">
+                <div id="login-error" class="text-red-500 text-sm hidden text-center">Invalid Credentials</div>
+                <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl transition shadow-lg">Login to System</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="app-container" class="hidden flex-col h-full">
+        
+        <!-- HEADER -->
+        <header class="bg-white border-b border-slate-200 no-print flex-none">
+            <div class="max-w-7xl mx-auto px-4 flex justify-between items-center h-16">
+                <div class="font-bold text-xl text-teal-700">Prabhat<span class="text-slate-600">Shop</span></div>
+                <nav class="hidden md:flex space-x-1 h-full pt-2">
+                    <button onclick="switchTab('home')" class="tab-btn active px-4 h-full text-sm font-semibold" data-tab="home">Home</button>
+                    <button onclick="switchTab('template')" class="tab-btn px-4 h-full text-sm font-semibold" data-tab="template">Vendors</button>
+                    <button onclick="switchTab('action')" class="tab-btn px-4 h-full text-sm font-semibold" data-tab="action">Payments</button>
+                    <button onclick="switchTab('reports')" class="tab-btn px-4 h-full text-sm font-semibold" data-tab="reports">Reports</button>
+                    <button onclick="switchTab('purchase')" class="tab-btn px-4 h-full text-sm font-semibold" data-tab="purchase">Purchase</button>
+                </nav>
+                <div class="flex items-center gap-4">
+                    <span class="text-xs bg-slate-100 px-2 py-1 rounded">Admin Access</span>
+                    <button onclick="logout()" class="text-red-500 font-bold text-sm">Logout</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <main class="flex-grow overflow-y-auto p-4 md:p-8">
+            <div class="max-w-7xl mx-auto">
+
+                <!-- TAB: HOME -->
+                <section id="tab-home" class="tab-content">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                        <div>
+                            <h2 class="text-3xl font-bold text-slate-800">Shop Summary</h2>
+                            <p class="text-slate-500">Shop management and reporting.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="exportData()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-slate-900 transition">
+                                <span>📥</span> Export Backup
+                            </button>
+                            <label class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center gap-2 hover:bg-teal-700 transition">
+                                <span>📤</span> Import
+                                <input type="file" id="import-file" class="hidden" onchange="importData(event)">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-sm font-bold uppercase tracking-wider">Total Payable</div>
+                            <div class="text-4xl font-black text-red-600 mt-1" id="dash-total-balance">₹0.00</div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-sm font-bold uppercase tracking-wider">Active Vendors</div>
+                            <div class="text-4xl font-black text-slate-800 mt-1" id="dash-vendor-count">0</div>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="text-slate-400 text-sm font-bold uppercase tracking-wider">Payments (Month)</div>
+                            <div class="text-4xl font-black text-teal-600 mt-1" id="dash-month-paid">₹0.00</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                        <h3 class="font-bold text-slate-700 mb-6">Cash Flow Trends</h3>
+                        <div class="chart-container">
+                            <canvas id="chart-main"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB: VENDOR TEMPLATE -->
+                <section id="tab-template" class="tab-content hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div class="lg:col-span-4">
+                            <div class="bg-white p-6 rounded-2xl border-2 border-slate-100 sticky top-0">
+                                <h3 class="text-xl font-bold mb-4 text-teal-700">Add Vendor</h3>
+                                <form id="vendor-form" class="space-y-4">
+                                    <input type="text" id="v-name" required class="w-full p-3 border rounded-xl" placeholder="Full Vendor Name">
+                                    <input type="text" id="v-alias" class="w-full p-3 border rounded-xl" placeholder="Alias (Short Name)">
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="text-[10px] font-bold text-slate-400 uppercase">Op. Purchase</label>
+                                            <input type="number" id="v-op-pur" value="0" class="w-full p-2 border rounded-lg bg-slate-50">
+                                        </div>
+                                        <div>
+                                            <label class="text-[10px] font-bold text-slate-400 uppercase">Op. Paid</label>
+                                            <input type="number" id="v-op-paid" value="0" class="w-full p-2 border rounded-lg bg-slate-50">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition">Create Template</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="lg:col-span-8">
+                            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                                <table class="w-full text-left">
+                                    <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+                                        <tr>
+                                            <th class="p-4">S.No.</th>
+                                            <th class="p-4">Vendor</th>
+                                            <th class="p-4 text-right">Total Purchase</th>
+                                            <th class="p-4 text-right">Total Paid</th>
+                                            <th class="p-4 text-right">Balance</th>
+                                            <th class="p-4 text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="vendor-table-body" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB: ACTION (PAYMENT) -->
+                <section id="tab-action" class="tab-content hidden">
+                    <div class="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-xl border-t-8 border-teal-600">
+                        <h2 class="text-2xl font-bold mb-6">Voucher Entry: Payment Out</h2>
+                        <form id="payment-form" class="space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold mb-1">Date</label>
+                                    <input type="date" id="p-date" required class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold mb-1">Mode</label>
+                                    <select id="p-mode" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500">
+                                        <option>Cash</option>
+                                        <option>UPI / Online</option>
+                                        <option>Cheque</option>
+                                        <option>Bank Transfer</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold mb-1">To Vendor</label>
+                                    <select id="p-vendor" required class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500" onchange="showActionBalance()">
+                                        <option value="">Select Vendor</option>
+                                    </select>
+                                    <div id="p-bal-info" class="mt-2 text-sm font-bold hidden">
+                                        Current Balance: <span id="p-bal-val" class="text-red-600">₹0.00</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold mb-1 text-slate-600">Payment Slip No. (Optional)</label>
+                                    <input type="text" id="p-slip-no" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-teal-500 placeholder-slate-300" placeholder="e.g. SLP-1234">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold mb-1">Amount Paid (₹)</label>
+                                <input type="number" id="p-amount" step="0.01" required class="w-full p-4 border rounded-xl text-2xl font-black text-teal-700 focus:ring-2 focus:ring-teal-500 outline-none">
+                            </div>
+                            <button type="submit" class="w-full bg-teal-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-teal-700 transition">Record Payment Voucher</button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- TAB: PURCHASE (MULTI-ITEM) -->
+                <section id="tab-purchase" class="tab-content hidden">
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
+                        <div class="flex flex-col md:flex-row gap-4 mb-6">
+                            <div class="flex-1">
+                                <label class="block text-xs font-bold text-slate-400 mb-1">Vendor</label>
+                                <select id="pur-vendor" class="w-full p-2 border rounded-lg bg-slate-50" onchange="handleVendorChange()"></select>
+                            </div>
+                            <div class="w-40">
+                                <label class="block text-xs font-bold text-slate-400 mb-1">Bill Date</label>
+                                <input type="date" id="pur-date" class="w-full p-2 border rounded-lg bg-slate-50">
+                            </div>
+                            <div class="w-40">
+                                <label class="block text-xs font-bold text-slate-400 mb-1">Bill No.</label>
+                                <input type="text" id="pur-bill-no" placeholder="Enter Bill No." class="w-full p-2 border rounded-lg bg-slate-50">
+                            </div>
+                        </div>
+
+                        <div class="border-t border-slate-100 pt-6">
+                            <h4 class="font-bold text-slate-700 mb-4">Add Items to Bill</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded-xl">
+                                <div class="md:col-span-5">
+                                    <label class="text-[10px] uppercase font-bold text-slate-400">Item Name</label>
+                                    <input type="text" id="item-name" class="w-full p-2 border rounded">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="text-[10px] uppercase font-bold text-slate-400">Qty</label>
+                                    <input type="number" id="item-qty" class="w-full p-2 border rounded">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="text-[10px] uppercase font-bold text-slate-400">Unit</label>
+                                    <input type="text" id="item-unit" class="w-full p-2 border rounded" placeholder="e.g. pcs, kg">
+                                </div>
+                                <div class="md:col-span-3">
+                                    <label class="text-[10px] uppercase font-bold text-slate-400">Rate</label>
+                                    <input type="number" id="item-rate" class="w-full p-2 border rounded">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <button onclick="addItemToStaging()" class="w-full bg-teal-600 text-white font-bold p-2 rounded hover:bg-teal-700 transition">Add</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 overflow-x-auto">
+                            <table class="w-full text-sm text-left border-collapse table-fixed">
+                                <thead class="border-b-2 border-slate-200">
+                                    <tr>
+                                        <th class="p-2 w-12">S.No.</th>
+                                        <th class="p-2 w-55 break-words">Material</th>
+                                        <th class="p-2 w-48">Qty</th>
+                                        <th class="p-2 w-48">Unit</th>
+                                        <th class="p-2 w-48">Rate</th>
+                                        <th class="p-2 text-right w-40">Total</th>
+                                        <th class="p-2 text-center w-48">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="staged-items-body"></tbody>
+                                <tfoot>
+                                    <tr class="font-bold text-lg bg-slate-50">
+                                        <td colspan="6" class="p-4 text-right">Grand Total:</td>
+                                        <td id="pur-grand-total" class="p-4 text-right text-teal-700">₹ 0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="mt-8 flex justify-end">
+                            <button onclick="finalizePurchase()" class="bg-slate-800 text-white px-10 py-4 rounded-xl font-bold shadow-xl hover:bg-slate-900 transition">Save & Post Purchase Bill</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB: REPORTS -->
+                <section id="tab-reports" class="tab-content hidden h-full">
+                    <div class="no-print">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-bold">Report</h2>
+                            <div class="flex gap-3">
+                                <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition shadow">
+                                    <span>📊</span> Export Excel
+                                </button>
+                                <button onclick="prepareAndPrint()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition shadow">
+                                    <span>🖨️</span> Print Report
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 items-end mb-8 shadow-sm">
+                            <div class="flex-1 min-w-[200px]">
+                                <label class="text-xs font-bold text-slate-400">Vendor</label>
+                                <select id="rep-vendor" onchange="runReport()" class="w-full p-2 border rounded bg-slate-50">
+                                    <option value="all">All Vendors</option>
+                                </select>
+                            </div>
+                            <div class="w-40">
+                                <label class="text-xs font-bold text-slate-400">Start</label>
+                                <input type="date" id="rep-start" onchange="runReport()" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="w-40">
+                                <label class="text-xs font-bold text-slate-400">End</label>
+                                <input type="date" id="rep-end" onchange="runReport()" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="w-60">
+                                <label class="text-xs font-bold text-slate-400">Search Bill No. / Mode</label>
+                                <input type="text" id="rep-search" onkeyup="runReport()" class="w-full p-2 border rounded bg-slate-50" placeholder="Type to search...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- REPORT TEMPLATE -->
+                    <div id="report-template-area" class="bg-white p-8 md:p-12 border border-slate-200 shadow-lg min-h-screen">
+                        <!-- Print Header -->
+                        <div class="flex justify-between items-start border-b-4 border-slate-800 pb-6 mb-8">
+                            <div>
+                                <P class="text-4xl font-black text-slate-800 uppercase">Statement of Accounts</P>
+                                <p class="text-slate-500 mt-2">Generated on: <span id="rep-gen-date"></span></p>
+                            </div>
+                            <div class="text-right">
+                                <h4 class="font-bold text-xl">PRABHAT BOOK DEPOT</h4>
+                                <p class="text-sm">Sushila Vihar 1 Bhoor</p>
+                                <p class="text-sm">Bulandshahr</p>
+                                <p class="text-sm">Mob.-9837902200</p>
+                            </div>
+                        </div>
+
+                        <!-- Auto Summary Block -->
+                        <div class="grid grid-cols-4 gap-4 mb-8">
+                            <div class="bg-slate-50 p-4 border border-slate-200 rounded-lg">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Opening Debt</div>
+                                <div id="rep-sum-open" class="text-xl font-bold">₹ 0.00</div>
+                            </div>
+                            <div class="bg-slate-50 p-4 border border-slate-200 rounded-lg">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Purchase (In)</div>
+                                <div id="rep-sum-pur" class="text-xl font-bold text-blue-600">₹ 0.00</div>
+                            </div>
+                            <div class="bg-slate-50 p-4 border border-slate-200 rounded-lg">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Payments (Out)</div>
+                                <div id="rep-sum-paid" class="text-xl font-bold text-teal-600">₹ 0.00</div>
+                            </div>
+                            <div class="bg-slate-50 p-4 border border-slate-200 border-l-4 border-l-red-500 rounded-r-lg shadow-inner">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">Net Balance</div>
+                                <div id="rep-sum-bal" class="text-xl font-bold text-red-600">₹ 0.00</div>
+                            </div>
+                        </div>
+
+                        <!-- Details Table -->
+                        <div class="mb-10">
+                            <h4 class="font-black text-slate-800 uppercase mb-4 text-sm tracking-widest">Transaction History</h4>
+                            <table class="w-full text-sm border-collapse">
+                                <thead class="bg-slate-800 text-white rounded-t-lg">
+                                    <tr>
+                                        <th class="p-3 text-left">S.No.</th>
+                                        <th class="p-3 text-left">Date</th>
+										<th class="p-3 text-left">Vendor</th>
+                                        <th class="p-3 text-left">Type</th>
+                                        <th class="p-3 text-left">Details</th>
+                                        <th class="p-3 text-right">Debit (+)</th>
+                                        <th class="p-3 text-right">Credit (-)</th>
+                                        <th class="p-3 text-center no-print">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rep-table-body" class="divide-y divide-slate-300"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Signatures -->
+                        <div class="flex justify-between mt-20 pt-10 border-t border-slate-200 no-print">
+                            <div class="text-center w-40">
+                                <div class="border-b border-slate-400 h-10 mb-2"></div>
+                                <p class="text-xs font-bold uppercase"></p>
+                            </div>
+                            <div class="text-center w-40">
+                                <div class="border-b border-slate-400 h-10 mb-2"></div>
+                                <p class="text-xs font-bold uppercase"></p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- DATA STORE ---
+        let store = {
+            vendors: [],
+            transactions: []
+        };
+
+        let purchaseStaging = [];
+        let currentReportData = []; // To keep track of filtered data for Excel export
+        let currentOpeningBal = 0;  // To store opening balance for Excel export
+
+        // Password for Data Deletion
+        const DELETE_PASS = "Rajesh4568@123";
+
+        // --- ASYNC DATABASE LOAD (IndexedDB) ---
+        async function loadData() {
+            try {
+                const storedVendors = await localforage.getItem('vp_vendors');
+                const storedTransactions = await localforage.getItem('vp_transactions');
+                
+                if (storedVendors) store.vendors = storedVendors;
+                if (storedTransactions) store.transactions = storedTransactions;
+
+                // Auto-migrate old localStorage data to the new Database system if it exists
+                if (!storedVendors && localStorage.getItem('vp_vendors')) {
+                    store.vendors = JSON.parse(localStorage.getItem('vp_vendors'));
+                    store.transactions = JSON.parse(localStorage.getItem('vp_transactions')) || [];
+                    await save(); // Save to new DB
+                }
+            } catch (err) {
+                console.error("Database load error:", err);
+            }
+        }
+
+        // --- AUTH ---
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            if(u === 'Admin' && p === '123') {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('app-container').classList.remove('hidden');
+                document.getElementById('app-container').classList.add('flex');
+                
+                // Load the database before initializing the UI
+                await loadData();
+                init();
+            } else {
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        });
+
+        function logout() { location.reload(); }
+
+        // --- PERSISTENCE ---
+        async function save() {
+            try {
+                // Save automatically to the browser's high-capacity IndexedDB
+                await localforage.setItem('vp_vendors', store.vendors);
+                await localforage.setItem('vp_transactions', store.transactions);
+                
+                // Keep localStorage updated as a secondary fallback
+                localStorage.setItem('vp_vendors', JSON.stringify(store.vendors));
+                localStorage.setItem('vp_transactions', JSON.stringify(store.transactions));
+                
+                refreshUI();
+            } catch (err) {
+                console.error("Database save error:", err);
+                alert("Error saving to local database!");
+            }
+        }
+
+        // --- BACKUP & RESTORE ---
+        function exportData() {
+            const blob = new Blob([JSON.stringify(store)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vendor_pro_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if(data.vendors && data.transactions) {
+                        store = data;
+                        await save();
+                        alert('Data Restored Successfully!');
+                    }
+                } catch(err) { alert('Invalid backup file'); }
+            };
+            reader.readAsText(file);
+        }
+
+        // --- NAVIGATION ---
+        function switchTab(id) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('hidden', c.id !== `tab-${id}`));
+            if(id === 'reports') runReport();
+        }
+
+        // --- VENDOR LOGIC ---
+        document.getElementById('vendor-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const v = {
+                id: Date.now(),
+                name: document.getElementById('v-name').value,
+                alias: document.getElementById('v-alias').value,
+                opPur: parseFloat(document.getElementById('v-op-pur').value) || 0,
+                opPaid: parseFloat(document.getElementById('v-op-paid').value) || 0
+            };
+            store.vendors.push(v);
+            save();
+            e.target.reset();
+        });
+
+        function deleteVendor(id) {
+            const pass = prompt('WARNING: Deleting a vendor will erase all their records.\n\nEnter Admin Password to confirm:');
+            if(pass === DELETE_PASS) {
+                store.vendors = store.vendors.filter(v => v.id !== id);
+                store.transactions = store.transactions.filter(t => t.vendorId !== id);
+                save();
+                alert('Vendor and associated records deleted.');
+            } else if (pass !== null) {
+                alert('Incorrect Password! Deletion canceled.');
+            }
+        }
+
+        // --- PURCHASE (MULTI-ITEM) LOGIC ---
+        function handleVendorChange() {
+            if (purchaseStaging.length > 0) {
+                purchaseStaging = [];
+                renderStaging();
+                alert('Staged items cleared to match the new vendor selection.');
+            }
+        }
+
+        function addItemToStaging() {
+            const name = document.getElementById('item-name').value;
+            const qty = parseFloat(document.getElementById('item-qty').value) || 0;
+            const rate = parseFloat(document.getElementById('item-rate').value) || 0;
+            const unit = document.getElementById('item-unit').value || '';
+
+            if(!name || qty <= 0 || rate <= 0) return;
+
+            purchaseStaging.push({ name, qty, rate, unit, total: qty * rate });
+            renderStaging();
+            document.getElementById('item-name').value = '';
+            document.getElementById('item-qty').value = '';
+            document.getElementById('item-rate').value = '';
+            document.getElementById('item-unit').value = '';
+            document.getElementById('item-name').focus();
+        }
+
+        function renderStaging() {
+            const body = document.getElementById('staged-items-body');
+            body.innerHTML = '';
+            let grandTotal = 0;
+            purchaseStaging.forEach((item, idx) => {
+                grandTotal += item.total;
+                body.innerHTML += `
+                    <tr>
+                        <td class="p-2 border-b">${idx + 1}</td>
+                        <td class="p-2 border-b">${item.name}</td>
+                        <td class="p-2 border-b">${item.qty}</td>
+                        <td class="p-2 border-b">${item.unit || ''}</td>
+                        <td class="p-2 border-b">${item.rate}</td>
+                        <td class="p-2 border-b text-right">${item.total.toFixed(2)}</td>
+                        <td class="p-2 border-b text-center"><button onclick="removeItem(${idx})" class="text-red-500 hover:text-red-700">Remove</button></td>
+                    </tr>
+                `;
+            });
+            document.getElementById('pur-grand-total').innerText = '₹' + grandTotal.toFixed(2);
+        }
+
+        function removeItem(idx) {
+            purchaseStaging.splice(idx, 1);
+            renderStaging();
+        }
+
+        function finalizePurchase() {
+            const vId = document.getElementById('pur-vendor').value;
+            if(!vId || purchaseStaging.length === 0) {
+                alert('Select vendor and add items first!');
+                return;
+            }
+
+            const totalAmount = purchaseStaging.reduce((acc, i) => acc + i.total, 0);
+
+            const tx = {
+                id: Date.now(),
+                vendorId: vId,
+                date: document.getElementById('pur-date').value || new Date().toISOString().split('T')[0],
+                type: 'purchase',
+                billNo: document.getElementById('pur-bill-no').value || 'N/A',
+                items: [...purchaseStaging],
+                amount: totalAmount
+            };
+
+            store.transactions.push(tx);
+            purchaseStaging = [];
+            document.getElementById('pur-bill-no').value = '';
+            renderStaging();
+            save();
+            alert('Purchase Bill Saved!');
+        }
+
+        // --- PAYMENT LOGIC ---
+        document.getElementById('payment-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const tx = {
+                id: Date.now(),
+                vendorId: document.getElementById('p-vendor').value,
+                date: document.getElementById('p-date').value,
+                type: 'payment',
+                mode: document.getElementById('p-mode').value,
+                slipNo: document.getElementById('p-slip-no').value, // Saved Slip Number
+                amount: parseFloat(document.getElementById('p-amount').value)
+            };
+            store.transactions.push(tx);
+            save();
+            e.target.reset();
+            document.getElementById('p-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('p-slip-no').value = ''; // Clear slip field
+            alert('Payment Voucher Saved');
+        });
+
+        function showActionBalance() {
+            const vid = document.getElementById('p-vendor').value;
+            const info = document.getElementById('p-bal-info');
+            if(!vid) { info.classList.add('hidden'); return; }
+            info.classList.remove('hidden');
+            document.getElementById('p-bal-val').innerText = getBal(vid).toFixed(2);
+        }
+
+        // --- TRANSACTIONS MANAGEMENT ---
+        function deleteTransaction(txId) {
+            const pass = prompt('Enter Admin Password to delete this specific transaction:');
+            if(pass === DELETE_PASS) {
+                store.transactions = store.transactions.filter(t => t.id !== txId);
+                save();
+                runReport(); // Refresh report view immediately
+                alert('Transaction deleted.');
+            } else if (pass !== null) {
+                alert('Incorrect Password! Deletion canceled.');
+            }
+        }
+
+        // --- CALCULATIONS ---
+        function getBal(vId) {
+            const v = store.vendors.find(x => x.id == vId);
+            if(!v) return 0;
+            let p = v.opPur, c = v.opPaid;
+            store.transactions.filter(t => t.vendorId == vId).forEach(t => {
+                if(t.type === 'purchase') p += t.amount;
+                else c += t.amount;
+            });
+            return p - c;
+        }
+
+        // --- DASHBOARD & UI ---
+        function refreshUI() {
+            // Stats
+            const vendors = store.vendors.length;
+            const totalBal = store.vendors.reduce((acc, v) => acc + getBal(v.id), 0);
+            
+            document.getElementById('dash-vendor-count').innerText = vendors;
+            document.getElementById('dash-total-balance').innerText = '₹' + totalBal.toFixed(2);
+
+            // Dropdowns
+            const opts = `<option value="">Select Vendor</option>` + store.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+            document.getElementById('p-vendor').innerHTML = opts;
+            document.getElementById('pur-vendor').innerHTML = opts;
+            document.getElementById('rep-vendor').innerHTML = `<option value="all">All Vendors</option>` + store.vendors.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+
+            // Vendor Table
+            const vBody = document.getElementById('vendor-table-body');
+            vBody.innerHTML = store.vendors.map((v, idx) => {
+                const bal = getBal(v.id);
+                return `<tr>
+                    <td class="p-4">${idx + 1}</td>
+                    <td class="p-4"><span class="font-bold">${v.name}</span><br><span class="text-xs text-slate-400">${v.alias || '-'}</span></td>
+                    <td class="p-4 text-right">₹${(v.opPur + store.transactions.filter(t => t.vendorId == v.id && t.type === 'purchase').reduce((a, b) => a + b.amount, 0)).toFixed(2)}</td>
+                    <td class="p-4 text-right">₹${(v.opPaid + store.transactions.filter(t => t.vendorId == v.id && t.type === 'payment').reduce((a, b) => a + b.amount, 0)).toFixed(2)}</td>
+                    <td class="p-4 text-right font-black ${bal > 0 ? 'text-red-600' : 'text-teal-600'}">₹${bal.toFixed(2)}</td>
+                    <td class="p-4 text-center"><button onclick="deleteVendor(${v.id})" class="text-red-400 hover:text-red-700">Delete</button></td>
+                </tr>`;
+            }).join('');
+
+            updateChart();
+        }
+
+        // --- REPORT GENERATOR ---
+        function runReport() {
+            const vId = document.getElementById('rep-vendor').value;
+            const start = document.getElementById('rep-start').value;
+            const end = document.getElementById('rep-end').value;
+            const search = document.getElementById('rep-search') ? document.getElementById('rep-search').value.toLowerCase() : '';
+
+            document.getElementById('rep-gen-date').innerText = new Date().toLocaleString();
+
+            let data = [...store.transactions].sort((a,b) => new Date(a.date) - new Date(b.date));
+            if(vId !== 'all') data = data.filter(t => t.vendorId == vId);
+            if(start) data = data.filter(t => t.date >= start);
+            if(end) data = data.filter(t => t.date <= end);
+            
+            if(search) {
+                data = data.filter(t => {
+                    if (t.type === 'purchase') {
+                        const billMatch = t.billNo && t.billNo.toLowerCase().includes(search);
+                        const itemMatch = t.items && t.items.some(item => item.name && item.name.toLowerCase().includes(search));
+                        return billMatch || itemMatch;
+                    } else if (t.type === 'payment') {
+                        const modeMatch = t.mode && t.mode.toLowerCase().includes(search);
+                        const slipMatch = t.slipNo && t.slipNo.toLowerCase().includes(search);
+                        return modeMatch || slipMatch;
+                    }
+                    return false;
+                });
+            }
+
+            currentReportData = data; // Save to global variable for Excel Export
+
+            let sOpen = 0, sPur = 0, sPaid = 0;
+            // Calc Opening
+            if(vId === 'all') {
+                sOpen = store.vendors.reduce((acc, v) => acc + (v.opPur - v.opPaid), 0);
+            } else {
+                const v = store.vendors.find(x => x.id == vId);
+                if(v) sOpen = v.opPur - v.opPaid;
+            }
+            currentOpeningBal = sOpen;
+
+            const tbody = document.getElementById('rep-table-body');
+            tbody.innerHTML = '';
+            // First Row: Opening
+            tbody.innerHTML += `<tr class="bg-slate-50 italic"><td class="p-3">-</td><td class="p-3">-</td><td class="p-3">OPENING</td><td class="p-3">Balance B/F</td><td class="p-3 text-right">-</td><td class="p-3 text-right">₹${sOpen.toFixed(2)}</td><td class="no-print"></td></tr>`;
+
+            data.forEach((t, idx) => {
+                const isPur = t.type === 'purchase';
+                if(isPur) sPur += t.amount; else sPaid += t.amount;
+                
+                // Show slipNo if it exists
+                let desc = isPur ? `Bill: ${t.billNo} (${t.items.length} items)` : `Paid via ${t.mode}`;
+                if (!isPur && t.slipNo) {
+                    desc += ` <span class="text-xs font-bold text-teal-600">(Slip: ${t.slipNo})</span>`;
+                }
+
+                tbody.innerHTML += `<tr>
+                    <td class="p-3">${idx + 1}</td>
+                    <td class="p-3 whitespace-nowrap">${t.date}</td>
+                    <td class="p-3 font-bold">${store.vendors.find(v => v.id == t.vendorId)?.name || '-'} </td>
+					<td class="p-3 font-bold text-xs">${t.type.toUpperCase()}</td>
+                    <td class="p-3 text-slate-600">${desc}</td>
+                    <td class="p-3 text-right font-medium">${isPur ? '₹' + t.amount.toFixed(2) : '-'}</td>
+                    <td class="p-3 text-right font-medium">${!isPur ? '₹' + t.amount.toFixed(2) : '-'}</td>
+                    <td class="p-3 text-center no-print">
+                        <div class="flex justify-center gap-2">
+                            ${isPur ? `<button onclick="showBillDetails(${t.id})" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1 rounded text-xs">View</button>` : ''}
+                            <button onclick="deleteTransaction(${t.id})" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs">Del</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            document.getElementById('rep-sum-open').innerText = '₹' + sOpen.toFixed(2);
+            document.getElementById('rep-sum-pur').innerText = '₹' + sPur.toFixed(2);
+            document.getElementById('rep-sum-paid').innerText = '₹' + sPaid.toFixed(2);
+            document.getElementById('rep-sum-bal').innerText = '₹' + (sOpen + sPur - sPaid).toFixed(2);
+        }
+
+        // --- EXCEL EXPORT ---
+        function exportExcel() {
+            if (!window.XLSX) {
+                alert("Excel Library is still loading. Please try again in a moment.");
+                return;
+            }
+
+            let exportRows = [];
+            
+            // 1. Add Opening Balance Row
+            exportRows.push({
+                "Date": "-",
+                "Vendor": "-",
+                "Transaction Type": "OPENING BALANCE",
+                "Bill / Slip No": "-",
+                "Payment Mode": "-",
+                "Item Name": "-",
+                "Qty": "-",
+                "Unit": "-",
+                "Rate (₹)": "-",
+                "Debit / Purchase (₹)": 0,
+                "Credit / Payment (₹)": 0,
+                "Balance (₹)": currentOpeningBal
+            });
+
+            let runningBalance = currentOpeningBal;
+            let totalDebit = 0;
+            let totalCredit = 0;
+
+            // 2. Loop through filtered data and flatten the items for Purchases
+            currentReportData.forEach(t => {
+                const vendorName = store.vendors.find(v => v.id == t.vendorId)?.name || '-';
+                
+                if (t.type === 'purchase') {
+                    totalDebit += t.amount;
+                    runningBalance += t.amount;
+                    
+                    if(t.items && t.items.length > 0) {
+                        t.items.forEach(item => {
+                            exportRows.push({
+                                "Date": t.date,
+                                "Vendor": vendorName,
+                                "Transaction Type": "PURCHASE",
+                                "Bill / Slip No": t.billNo || '-',
+                                "Payment Mode": "-",
+                                "Item Name": item.name,
+                                "Qty": item.qty,
+                                "Unit": item.unit || '-',
+                                "Rate (₹)": item.rate,
+                                "Debit / Purchase (₹)": item.total,
+                                "Credit / Payment (₹)": 0,
+                                "Balance (₹)": "-" // Keep it blank to avoid confusion on item rows
+                            });
+                        });
+                    } else {
+                        // Fallback if a purchase has no items saved for some reason
+                        exportRows.push({
+                            "Date": t.date,
+                            "Vendor": vendorName,
+                            "Transaction Type": "PURCHASE",
+                            "Bill / Slip No": t.billNo || '-',
+                            "Payment Mode": "-",
+                            "Item Name": "General / No Items",
+                            "Qty": "-",
+                            "Unit": "-",
+                            "Rate (₹)": "-",
+                            "Debit / Purchase (₹)": t.amount,
+                            "Credit / Payment (₹)": 0,
+                            "Balance (₹)": "-"
+                        });
+                    }
+                } else if (t.type === 'payment') {
+                    totalCredit += t.amount;
+                    runningBalance -= t.amount;
+                    
+                    exportRows.push({
+                        "Date": t.date,
+                        "Vendor": vendorName,
+                        "Transaction Type": "PAYMENT",
+                        "Bill / Slip No": t.slipNo || '-',
+                        "Payment Mode": t.mode || '-',
+                        "Item Name": "-",
+                        "Qty": "-",
+                        "Unit": "-",
+                        "Rate (₹)": "-",
+                        "Debit / Purchase (₹)": 0,
+                        "Credit / Payment (₹)": t.amount,
+                        "Balance (₹)": "-"
+                    });
+                }
+            });
+
+            // 3. Add Final Grand Totals Row
+            exportRows.push({
+                "Date": "TOTALS",
+                "Vendor": "",
+                "Transaction Type": "",
+                "Bill / Slip No": "",
+                "Payment Mode": "",
+                "Item Name": "",
+                "Qty": "",
+                "Unit": "",
+                "Rate (₹)": "",
+                "Debit / Purchase (₹)": totalDebit,
+                "Credit / Payment (₹)": totalCredit,
+                "Balance (₹)": runningBalance
+            });
+
+            // Build Workbook and Download
+            const ws = XLSX.utils.json_to_sheet(exportRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Statement of Accounts");
+            
+            const filename = `PrabhatShop_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, filename);
+        }
+
+        function prepareAndPrint() {
+            window.print();
+        }
+
+        // --- CHART ---
+        let mainChart;
+        function updateChart() {
+            const ctx = document.getElementById('chart-main').getContext('2d');
+            const labels = [];
+            const purData = [];
+            const payData = [];
+            
+            for(let i=5; i>=0; i--) {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+                labels.push(d.toLocaleDateString('en-US', {month: 'short'}));
+                
+                const mPur = store.transactions.filter(t => t.date.startsWith(k) && t.type === 'purchase').reduce((a,b) => a+b.amount, 0);
+                const mPay = store.transactions.filter(t => t.date.startsWith(k) && t.type === 'payment').reduce((a,b) => a+b.amount, 0);
+                purData.push(mPur);
+                payData.push(mPay);
+            }
+
+            if(mainChart) mainChart.destroy();
+            mainChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Purchases (Debt)', data: purData, borderColor: '#3b82f6', tension: 0.3 },
+                        { label: 'Payments (Credit)', data: payData, borderColor: '#0d9488', tension: 0.3 }
+                    ]
+                },
+                options: { maintainAspectRatio: false }
+            });
+        }
+
+        function init() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('p-date').value = today;
+            document.getElementById('pur-date').value = today;
+            refreshUI();
+        }
+
+        // --- BILL DETAILS LOGIC ---
+        function showBillDetails(billId) {
+            const tx = store.transactions.find(t => t.id == billId);
+            if (!tx || !tx.items) return;
+            let html = `<div class="mb-4">
+                <div class="font-bold text-lg">Bill No: ${tx.billNo}</div>
+                <div class="text-sm text-slate-500">Date: ${tx.date}</div>
+                <div class="text-sm text-slate-500">Party: ${store.vendors.find(v => v.id == tx.vendorId)?.name || '-'}</div>
+            </div>`;
+            html += `<table class="w-full text-sm border-collapse mb-4">
+                <thead class="bg-slate-100">
+                    <tr>
+                        <th class="p-2 w-12">S.No.</th>
+                        <th class="p-2">Item</th>
+                        <th class="p-2">Qty</th>
+                        <th class="p-2">Unit</th>
+                        <th class="p-2">Rate</th>
+                        <th class="p-2 text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            tx.items.forEach(item => {
+                html += `<tr>
+                    <td class="p-2">${tx.items.indexOf(item) + 1}</td>
+                    <td class="p-2">${item.name}</td>
+                    <td class="p-2">${item.qty}</td>
+                    <td class="p-2">${item.unit || ''}</td>
+                    <td class="p-2">${item.rate}</td>
+                    <td class="p-2 text-right">₹${item.total.toFixed(2)}</td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+            html += `<div class="text-right font-bold text-lg border-t pt-2">Grand Total: ₹${tx.amount.toFixed(2)}</div>`;
+            document.getElementById('bill-details-content').innerHTML = html;
+            document.getElementById('bill-details-modal').classList.remove('hidden');
+        }
+
+        function closeBillDetails() {
+            document.getElementById('bill-details-modal').classList.add('hidden');
+        }
+    </script>
+
+    <!-- Modal for Bill Details -->
+    <div id="bill-details-modal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-xl p-8 w-full max-w-lg relative">
+            <button onclick="closeBillDetails()" class="absolute top-2 right-2 text-xl text-red-500 hover:text-red-700">&times;</button>
+            <h3 class="text-2xl font-bold mb-4 text-teal-700 border-b pb-2">Purchase Bill Details</h3>
+            <div id="bill-details-content"></div>
+        </div>
+    </div>
+</body>
+</html>
